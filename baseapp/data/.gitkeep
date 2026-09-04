@@ -1,0 +1,2 @@
+# Place country.json in this folder (baseapp/baseapp/data/country.json).
+# It is read by baseapp.utils.sync_country_phone_flags (after_migrate hook).

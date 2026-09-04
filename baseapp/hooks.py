@@ -86,7 +86,10 @@ app_license = "mit"
 # ------------
 
 # before_install = "baseapp.install.before_install"
-# after_install = "baseapp.install.after_install"
+# after_install runs when `bench install-app baseapp` is executed
+# (after_migrate alone only runs on `bench migrate`, not on fresh install)
+after_install = "baseapp.utils.enforce_baseapp_settings"
+after_migrate = "baseapp.utils.enforce_baseapp_settings"
 
 # Uninstallation
 # ------------
@@ -138,13 +141,11 @@ app_license = "mit"
 # ---------------
 # Hook on document methods and events
 
-# doc_events = {
-# 	"*": {
-# 		"on_update": "method",
-# 		"on_cancel": "method",
-# 		"on_trash": "method"
-# 	}
-# }
+doc_events = {
+	"Contact": {
+		"validate": "baseapp.utils.set_contact_status_open",
+	},
+}
 
 # Scheduled Tasks
 # ---------------

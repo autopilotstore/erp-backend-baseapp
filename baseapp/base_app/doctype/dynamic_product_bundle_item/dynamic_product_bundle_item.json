@@ -1,0 +1,109 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "creation": "2026-09-21 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "bundle_item",
+  "bundle_option",
+  "item",
+  "min_qty",
+  "max_qty",
+  "uom"
+ ],
+ "fields": [
+  {
+   "description": "Item paket (harus bertanda Is Dynamic Product Bundle) yang memiliki komponen ini.",
+   "fieldname": "bundle_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Paket (Item)",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "description": "Kosongkan bila item ini komponen tetap (selalu ikut, bukan pilihan kasir). Dipakai untuk komponen yang boleh dipilih kasir (filter_type = Item).",
+   "fieldname": "bundle_option",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Pilihan Isian",
+   "options": "Dynamic Product Bundle Option"
+  },
+  {
+   "fieldname": "item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "Item",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "description": "Batas qty minimal per item. 0 = opsional (tidak wajib dipilih).",
+   "fieldname": "min_qty",
+   "fieldtype": "Float",
+   "label": "Min Qty",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Batas qty maksimal per item. 0 = tanpa batas.",
+   "fieldname": "max_qty",
+   "fieldtype": "Float",
+   "label": "Max Qty",
+   "non_negative": 1
+  },
+  {
+   "fetch_from": "item.stock_uom",
+   "fetch_if_empty": 1,
+   "fieldname": "uom",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "label": "UOM",
+   "options": "UOM",
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-09-21 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Base App",
+ "name": "Dynamic Product Bundle Item",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "import": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Item Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "bundle_item,item",
+ "sort_field": "creation",
+ "sort_order": "DESC",
+ "states": [],
+ "title_field": "item",
+ "track_changes": 1
+}

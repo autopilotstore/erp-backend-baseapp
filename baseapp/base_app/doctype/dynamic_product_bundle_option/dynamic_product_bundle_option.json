@@ -1,0 +1,108 @@
+{
+ "actions": [],
+ "allow_rename": 1,
+ "autoname": "format:{option_name} - {bundle_item}",
+ "creation": "2026-09-21 09:00:00.000000",
+ "doctype": "DocType",
+ "editable_grid": 1,
+ "engine": "InnoDB",
+ "field_order": [
+  "bundle_item",
+  "option_name",
+  "seq",
+  "min_qty",
+  "max_qty",
+  "filter_type"
+ ],
+ "fields": [
+  {
+   "fieldname": "bundle_item",
+   "fieldtype": "Link",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Paket (Item)",
+   "options": "Item",
+   "reqd": 1
+  },
+  {
+   "fieldname": "option_name",
+   "fieldtype": "Data",
+   "in_list_view": 1,
+   "label": "Nama Pilihan Isian",
+   "reqd": 1
+  },
+  {
+   "default": "0",
+   "fieldname": "seq",
+   "fieldtype": "Int",
+   "in_list_view": 1,
+   "label": "No Urut"
+  },
+  {
+   "default": "0",
+   "description": "Batas total qty minimal yang wajib dipilih kasir dari pilihan ini. 0 = tidak wajib.",
+   "fieldname": "min_qty",
+   "fieldtype": "Float",
+   "label": "Min Qty",
+   "non_negative": 1
+  },
+  {
+   "default": "0",
+   "description": "Batas total qty maksimal yang boleh dipilih kasir dari pilihan ini. 0 = tanpa batas.",
+   "fieldname": "max_qty",
+   "fieldtype": "Float",
+   "label": "Max Qty",
+   "non_negative": 1
+  },
+  {
+   "default": "Item",
+   "fieldname": "filter_type",
+   "fieldtype": "Select",
+   "in_list_view": 1,
+   "in_standard_filter": 1,
+   "label": "Tipe Filter",
+   "options": "Item\nItem Group",
+   "reqd": 1
+  }
+ ],
+ "links": [],
+ "modified": "2026-09-21 09:00:00.000000",
+ "modified_by": "Administrator",
+ "module": "Base App",
+ "name": "Dynamic Product Bundle Option",
+ "naming_rule": "Expression",
+ "owner": "Administrator",
+ "permissions": [
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "import": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "System Manager",
+   "share": 1,
+   "write": 1
+  },
+  {
+   "create": 1,
+   "delete": 1,
+   "email": 1,
+   "export": 1,
+   "print": 1,
+   "read": 1,
+   "report": 1,
+   "role": "Item Manager",
+   "share": 1,
+   "write": 1
+  }
+ ],
+ "search_fields": "bundle_item",
+ "sort_field": "seq",
+ "sort_order": "ASC",
+ "states": [],
+ "title_field": "option_name",
+ "track_changes": 1
+}

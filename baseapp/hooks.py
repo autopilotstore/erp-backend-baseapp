@@ -88,7 +88,18 @@ app_license = "mit"
 # before_install = "baseapp.install.before_install"
 # after_install runs when `bench install-app baseapp` is executed
 # (after_migrate alone only runs on `bench migrate`, not on fresh install)
-after_install = "baseapp.utils.enforce_baseapp_settings"
+#
+# collapse_item_groups and enable_item_naming_series are one-shot changes to
+# existing master data / settings, so they are NOT part of after_migrate: that
+# would wipe user created Item Groups and silently override an intentional
+# Item Naming By change on every deploy. Already-installed sites get them once
+# via baseapp.patches.*.
+after_install = [
+	"baseapp.utils.enforce_baseapp_settings",
+	"baseapp.utils.collapse_item_groups",
+	"baseapp.utils.enable_item_naming_series",
+	"baseapp.utils.backfill_item_product_bundle_flags",
+]
 after_migrate = "baseapp.utils.enforce_baseapp_settings"
 
 # Uninstallation
@@ -145,6 +156,28 @@ doc_events = {
 	"Contact": {
 		"validate": "baseapp.utils.set_contact_status_open",
 	},
+	"Item": {
+		# variants get a plain series code instead of "{template}-{abbr}"; must run
+		# before set_new_name() picks the name, hence before_insert
+		"before_insert": "baseapp.utils.assign_variant_item_code",
+		# a new Item with no barcode of its own gets barcode = item_code
+		"before_validate": "baseapp.utils.set_default_item_barcode",
+		# Item Name must not collide with an ACTIVE Item (ERPNext checks nothing)
+		"validate": "baseapp.utils.prevent_duplicate_item_name",
+		# renaming a template renames its variants too (ERPNext keeps the stale name)
+		"on_update": "baseapp.utils.sync_variant_item_names",
+	},
+	"Item Attribute": {
+		# user only fills attribute_value; abbr mirrors it. before_validate, not
+		# validate: the derived abbr still has to satisfy its `reqd` check, and
+		# before_validate also runs on import paths that set ignore_validate.
+		"before_validate": "baseapp.utils.sync_attribute_value_and_abbr",
+	},
+	"Product Bundle": {
+		# keep Item.is_product_bundle in sync (on_update also fires on insert)
+		"on_update": "baseapp.utils.sync_item_product_bundle_flag",
+		"on_trash": "baseapp.utils.clear_item_product_bundle_flag",
+	},
 }
 
 # Scheduled Tasks
@@ -176,10 +209,16 @@ doc_events = {
 # Extend DocType Class
 # ------------------------------
 #
-# Specify custom mixins to extend the standard doctype controller.
-# extend_doctype_class = {
-# 	"Task": "baseapp.custom.task.CustomTaskMixin"
-# }
+# Mixins to extend the standard doctype controller. The value MUST be a list of
+# dotted paths (frappe/model/base_document.py resolves `reversed(extensions)`).
+extend_doctype_class = {
+	# Variants are coded from a naming series by utils.assign_variant_item_code().
+	# ERPNext's ItemAttribute.on_update() would rename those Items back to
+	# "{template}-{abbr}" whenever an Item Attribute Value's abbr is edited, so the
+	# cascade is neutralised here. See overrides/item_attribute.py for the details
+	# and the ERPNext upgrade caveat.
+	"Item Attribute": ["baseapp.overrides.item_attribute.CustomItemAttribute"],
+}
 
 # Overriding Methods
 # ------------------------------

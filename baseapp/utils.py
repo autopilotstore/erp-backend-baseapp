@@ -5,6 +5,7 @@ import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
 from frappe.custom.doctype.property_setter.property_setter import make_property_setter
 from frappe.model.naming import make_autoname
+from frappe.utils import flt, getdate, nowdate
 
 
 def set_contact_status_open(doc, method):
@@ -511,6 +512,43 @@ def enable_item_naming_series():
         stock_settings.save()
 
 
+MINIMUM_PASSWORD_SCORE = 1
+
+
+def set_minimum_password_score():
+    """Turn the password policy on and set its minimum score.
+
+    The score is only ever *read* while the policy is on: User.test_password_strength()
+    returns {} straight away when enable_password_policy is falsy
+    (frappe/core/doctype/user/user.py:995-998). And SystemSettings.validate() blanks the
+    score on every save while the policy is off
+    (frappe/core/doctype/system_settings/system_settings.py:122-127) — including writes
+    coming through the API, because frappe.client.save/set_value both run validate().
+    Writing the score on its own would therefore be both inert and short lived, so the
+    policy is enabled together with it.
+
+    frappe.db.set_single_value() writes tabSingles directly and skips validate(). That is
+    safe here: the pair written below would pass validate() anyway (policy on + score > 0).
+
+    One-shot on purpose: NOT part of enforce_baseapp_settings(), so a later, deliberate
+    change to the policy is not reverted on every migrate. Registered in
+    hooks.after_install (fresh installs) and as
+    baseapp.patches.set_minimum_password_score (sites that already have the app, whose
+    install already marked every shipped patch as completed).
+    """
+    # baseapp is normally installed after frappe; stay safe on a bare bench
+    if not frappe.db.exists("DocType", "System Settings"):
+        return
+
+    frappe.db.set_single_value("System Settings", "enable_password_policy", 1)
+    frappe.db.set_single_value("System Settings", "minimum_password_score", MINIMUM_PASSWORD_SCORE)
+
+    # set_single_value() already clears the document cache, but System Settings is also
+    # cached in Redis (the "system_settings" key and client_cache); flush so the policy is
+    # live without waiting for a bench restart.
+    frappe.clear_cache()
+
+
 def assign_variant_item_code(doc, method=None):
     """Give a variant a plain series code instead of "{template}-{abbr}".
 
@@ -833,6 +871,108 @@ def clear_item_product_bundle_flag(doc, method=None):
     """
     for item_code in {doc.new_item_code, doc.name}:
         _set_item_product_bundle_flag(item_code, 0)
+
+
+STANDARD_ITEM_PRICE_FIELDS = {
+    "Standard Selling": "valuation_rate",
+    "Standard Buying": "standard_rate",
+}
+
+
+def prevent_standard_price_list_deletion(doc, method=None):
+    """Keep the standard price lists required by Item rate synchronization."""
+    if doc.name in STANDARD_ITEM_PRICE_FIELDS:
+        frappe.throw(
+            frappe._("{0} cannot be deleted because it is required for Item price synchronization.").format(
+                frappe.bold(doc.name)
+            ),
+            title=frappe._("Standard Price List"),
+        )
+
+
+def _is_current_general_stock_uom_price(price, stock_uom, today):
+    valid_from = getdate(price.valid_from) if price.valid_from else None
+    valid_upto = getdate(price.valid_upto) if price.valid_upto else None
+
+    return (
+        price.uom == stock_uom
+        and not price.customer
+        and not price.supplier
+        and not price.batch_no
+        and not flt(price.packing_unit)
+        and (not valid_from or valid_from <= today)
+        and (not valid_upto or valid_upto >= today)
+    )
+
+
+def sync_standard_item_prices(doc, method=None):
+    """Ensure an Item's stock UOM prices match its rates in the standard price lists."""
+    today = getdate(nowdate())
+
+    for price_list, item_field in STANDARD_ITEM_PRICE_FIELDS.items():
+        rate = flt(doc.get(item_field))
+        if rate < 0:
+            continue
+
+        matches = frappe.get_all(
+            "Item Price",
+            filters={"item_code": doc.name, "price_list": price_list, "uom": doc.stock_uom},
+            fields=[
+                "name",
+                "price_list_rate",
+                "valid_from",
+                "valid_upto",
+                "customer",
+                "supplier",
+                "batch_no",
+                "packing_unit",
+            ],
+            order_by="valid_from desc, modified desc",
+            limit_page_length=0,
+        )
+        item_price = next(
+            (
+                row
+                for row in matches
+                if _is_current_general_stock_uom_price(row, doc.stock_uom, today)
+            ),
+            None,
+        )
+
+        if item_price:
+            if flt(item_price.price_list_rate) != rate:
+                price_doc = frappe.get_doc("Item Price", item_price.name)
+                price_doc.price_list_rate = rate
+                price_doc.save()
+        elif rate > 0:
+            frappe.get_doc(
+                {
+                    "doctype": "Item Price",
+                    "item_code": doc.name,
+                    "price_list": price_list,
+                    "uom": doc.stock_uom,
+                    "price_list_rate": rate,
+                }
+            ).insert()
+
+
+def sync_item_rate_from_standard_price(doc, method=None):
+    """Mirror changes to a standard stock-UOM Item Price onto its Item rate field."""
+    previous = doc.get_doc_before_save()
+    if not previous or flt(previous.price_list_rate) == flt(doc.price_list_rate):
+        return
+
+    item_field = STANDARD_ITEM_PRICE_FIELDS.get(doc.price_list)
+    if not item_field:
+        return
+
+    item = frappe.db.get_value("Item", doc.item_code, ["stock_uom", item_field], as_dict=True)
+    if not item or not _is_current_general_stock_uom_price(doc, item.stock_uom, getdate(nowdate())):
+        return
+
+    rate = flt(doc.price_list_rate)
+    if flt(item.get(item_field)) != rate:
+        frappe.db.set_value("Item", doc.item_code, item_field, rate, update_modified=False)
 
 
 def backfill_item_product_bundle_flags():

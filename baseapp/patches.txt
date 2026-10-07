@@ -8,4 +8,5 @@ baseapp.patches.change_contact_default_status
 baseapp.patches.disable_lead_contact_auto_creation
 baseapp.patches.collapse_item_groups
 baseapp.patches.enable_item_naming_series
+baseapp.patches.set_minimum_password_score
 baseapp.patches.backfill_is_product_bundle

@@ -89,15 +89,16 @@ app_license = "mit"
 # after_install runs when `bench install-app baseapp` is executed
 # (after_migrate alone only runs on `bench migrate`, not on fresh install)
 #
-# collapse_item_groups and enable_item_naming_series are one-shot changes to
-# existing master data / settings, so they are NOT part of after_migrate: that
-# would wipe user created Item Groups and silently override an intentional
-# Item Naming By change on every deploy. Already-installed sites get them once
-# via baseapp.patches.*.
+# collapse_item_groups, enable_item_naming_series and set_minimum_password_score are
+# one-shot changes to existing master data / settings, so they are NOT part of
+# after_migrate: that would wipe user created Item Groups, silently override an
+# intentional Item Naming By change, or re-enable the password policy on every
+# deploy. Already-installed sites get them once via baseapp.patches.*.
 after_install = [
 	"baseapp.utils.enforce_baseapp_settings",
 	"baseapp.utils.collapse_item_groups",
 	"baseapp.utils.enable_item_naming_series",
+	"baseapp.utils.set_minimum_password_score",
 	"baseapp.utils.backfill_item_product_bundle_flags",
 ]
 after_migrate = "baseapp.utils.enforce_baseapp_settings"
@@ -160,12 +161,19 @@ doc_events = {
 		# variants get a plain series code instead of "{template}-{abbr}"; must run
 		# before set_new_name() picks the name, hence before_insert
 		"before_insert": "baseapp.utils.assign_variant_item_code",
+		"after_insert": "baseapp.utils.sync_standard_item_prices",
 		# a new Item with no barcode of its own gets barcode = item_code
 		"before_validate": "baseapp.utils.set_default_item_barcode",
 		# Item Name must not collide with an ACTIVE Item (ERPNext checks nothing)
 		"validate": "baseapp.utils.prevent_duplicate_item_name",
 		# renaming a template renames its variants too (ERPNext keeps the stale name)
 		"on_update": "baseapp.utils.sync_variant_item_names",
+	},
+	"Item Price": {
+		"on_update": "baseapp.utils.sync_item_rate_from_standard_price",
+	},
+	"Price List": {
+		"on_trash": "baseapp.utils.prevent_standard_price_list_deletion",
 	},
 	"Item Attribute": {
 		# user only fills attribute_value; abbr mirrors it. before_validate, not
@@ -295,4 +303,3 @@ extend_doctype_class = {
 # ------------
 # List of apps whose translatable strings should be excluded from this app's translations.
 # ignore_translatable_strings_from = []
-

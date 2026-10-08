@@ -164,7 +164,10 @@ doc_events = {
 		# a new Item with no barcode of its own gets barcode = item_code
 		"before_validate": "baseapp.utils.set_default_item_barcode",
 		# Item Name must not collide with an ACTIVE Item (ERPNext checks nothing)
-		"validate": "baseapp.utils.prevent_duplicate_item_name",
+		"validate": [
+			"baseapp.utils.normalize_item_hashtags",
+			"baseapp.utils.prevent_duplicate_item_name",
+		],
 		# renaming a template renames its variants too (ERPNext keeps the stale name)
 		"on_update": "baseapp.utils.sync_variant_item_names",
 	},

@@ -1,5 +1,6 @@
 import json
 import pathlib
+import re
 
 import frappe
 from frappe.custom.doctype.custom_field.custom_field import create_custom_fields
@@ -39,6 +40,9 @@ def enforce_baseapp_settings():
 
     # Item: sales quantity limits and multiples
     ensure_item_sales_quantity_custom_fields()
+
+    # Item: hashtags (child table, one row per hashtag)
+    ensure_item_hashtag_custom_fields()
 
     # Gender master: keep only Male / Female / Prefer not to say
     sync_genders()
@@ -186,6 +190,97 @@ def ensure_item_sales_quantity_custom_fields():
             ]
         }
     )
+
+
+ITEM_HASHTAG_FIELD = "hashtags"
+HASHTAG_PATTERN = re.compile(r"^[a-z0-9_-]{1,50}$")
+
+
+def ensure_item_hashtag_custom_fields():
+    """Add the hashtags child table to Item (idempotent).
+
+    A child table and not a delimited text column: the UI has to be able to ask for
+    exactly "promo" without also getting "promo2026". On a text column that needs
+    `regex` (which cannot use an index); a child row matches with `=`
+    ([['hashtags.hashtag', '=', 'promo']]) on an indexed column.
+
+    Every Item keeps its own list — template and each variant separately. Nothing is
+    copied down: copy_attributes_to_variant() (erpnext/controllers/item_variant.py:444)
+    only carries over fields that are `reqd` or listed in the `Variant Field` doctype,
+    and this field is neither. The frontend decides what a variant inherits.
+    """
+    create_custom_fields(
+        {
+            "Item": [
+                {
+                    "fieldname": ITEM_HASHTAG_FIELD,
+                    "label": "Hashtags",
+                    "fieldtype": "Table",
+                    "options": "Item Hashtag",
+                    "insert_after": "description",
+                    "description": (
+                        "Hashtag produk (tanpa tanda #, huruf kecil). Satu hashtag per baris. "
+                        "Disimpan sebagai child table agar bisa dicari persis."
+                    ),
+                }
+            ]
+        }
+    )
+
+
+def normalize_item_hashtags(doc, method=None):
+    """Hook: Item.validate — canonicalise the hashtags child table.
+
+    The frontend may send "#Promo" or "Promo"; everything is stored as "promo" so the
+    stored value is predictable and the exact-match filter keeps working. Blank rows are
+    dropped and duplicates (after normalisation) collapse to the first one — that also
+    keeps a filter on `in` from matching the same item twice.
+
+    Runs in the parent's validate on purpose. Document._save() calls
+    run_before_save_methods() (which runs validate) *before* update_children()
+    (frappe/model/document.py:594-608), so these rows are still unwritten and the
+    normalised values are what actually gets stored. It is also the only place that can
+    see the sibling rows: a child controller cannot detect duplicates across rows, nor
+    report "Row #3".
+
+    Child tables are replace-all on save (same rule as uoms/barcodes), so dropping rows
+    here really does delete them from the database.
+    """
+    rows = doc.get(ITEM_HASHTAG_FIELD) or []
+    if not rows:
+        return
+
+    # never fight app/site setup — patches and fixtures create Items freely
+    strict = not (frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch)
+
+    seen = set()
+    keep = []
+    for position, row in enumerate(rows, start=1):
+        raw = (row.get("hashtag") or "").strip()
+        value = raw.lstrip("#").strip().lower()
+
+        if not value:
+            continue
+
+        if not HASHTAG_PATTERN.match(value):
+            if strict:
+                frappe.throw(
+                    frappe._(
+                        "Row #{0}: hashtag {1} is not valid. Use lowercase letters, digits, "
+                        "- and _ only (max 50 characters)."
+                    ).format(row.idx or position, frappe.bold(raw)),
+                    title=frappe._("Invalid Hashtag"),
+                )
+            continue
+
+        if value in seen:
+            continue
+
+        seen.add(value)
+        row.hashtag = value
+        keep.append(row)
+
+    doc.set(ITEM_HASHTAG_FIELD, keep)
 
 
 def sync_country_phone_flags():

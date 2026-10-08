@@ -99,7 +99,6 @@ after_install = [
 	"baseapp.utils.collapse_item_groups",
 	"baseapp.utils.enable_item_naming_series",
 	"baseapp.utils.set_minimum_password_score",
-	"baseapp.utils.backfill_item_product_bundle_flags",
 ]
 after_migrate = "baseapp.utils.enforce_baseapp_settings"
 
@@ -180,11 +179,6 @@ doc_events = {
 		# validate: the derived abbr still has to satisfy its `reqd` check, and
 		# before_validate also runs on import paths that set ignore_validate.
 		"before_validate": "baseapp.utils.sync_attribute_value_and_abbr",
-	},
-	"Product Bundle": {
-		# keep Item.is_product_bundle in sync (on_update also fires on insert)
-		"on_update": "baseapp.utils.sync_item_product_bundle_flag",
-		"on_trash": "baseapp.utils.clear_item_product_bundle_flag",
 	},
 }
 

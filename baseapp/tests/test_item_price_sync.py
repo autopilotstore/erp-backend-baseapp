@@ -27,7 +27,7 @@ class TestItemPriceSync(FrappeTestCase):
 			}
 		).insert()
 
-		for price_list, expected_rate in (("Standard Selling", 7000), ("Standard Buying", 7100)):
+		for price_list, expected_rate in (("Standard Selling", 7100), ("Standard Buying", 7000)):
 			prices = frappe.get_all(
 				"Item Price",
 				filters={"item_code": item.name, "price_list": price_list},

@@ -31,8 +31,11 @@ def enforce_baseapp_settings():
     # Item: is_dynamic_product_bundle flag
     ensure_dynamic_product_bundle_custom_fields()
 
-    # Item: is_product_bundle flag (derived from the Product Bundle master)
+    # Item: is_product_bundle flag (manual, like the other product-type flags)
     ensure_product_bundle_custom_fields()
+
+    # Item: is_manufactured_item flag (manual marker, not derived from BOM)
+    ensure_manufactured_item_custom_fields()
 
     # Item: sales quantity limits and multiples
     ensure_item_sales_quantity_custom_fields()
@@ -680,8 +683,8 @@ def sync_variant_item_names(doc, method=None):
         renames.append((name, new_name))
 
     for name, new_name in renames:
-        # update_modified=False: bookkeeping, not a user edit — matches
-        # _set_item_product_bundle_flag() and ERPNext's own rename_variant_item_code().
+        # update_modified=False: bookkeeping, not a user edit — matches ERPNext's own
+        # rename_variant_item_code().
         frappe.db.set_value("Item", name, "item_name", new_name, update_modified=False)
 
 
@@ -780,10 +783,14 @@ PRODUCT_BUNDLE_ITEM_FLAG = "is_product_bundle"
 def ensure_product_bundle_custom_fields():
     """Add the is_product_bundle flag to Item (idempotent).
 
-    Mirrors is_dynamic_product_bundle, but unlike that one this is *derived*: baseapp
-    maintains it from the Product Bundle master (sync_item_product_bundle_flag),
-    because ERPNext keeps no trace of a bundle on the Item itself. Read-only in the
-    form so nobody edits it by hand.
+    A plain manual marker, same as is_dynamic_product_bundle and is_manufactured_item:
+    the user / frontend decides whether an Item is a static bundle. baseapp no longer
+    derives it from the Product Bundle master, so creating, editing, disabling or
+    deleting a Product Bundle leaves this flag untouched.
+
+    `read_only` / `no_copy` are passed explicitly as 0 (not simply omitted) because
+    create_custom_fields only writes the keys it is given — dropping a key would leave
+    the old value behind on sites that already have the field.
     """
     create_custom_fields(
         {
@@ -793,13 +800,13 @@ def ensure_product_bundle_custom_fields():
                     "label": "Is Product Bundle",
                     "fieldtype": "Check",
                     "default": "0",
-                    "read_only": 1,
-                    "no_copy": 1,
+                    "read_only": 0,
+                    "no_copy": 0,
                     "insert_after": "is_dynamic_product_bundle",
                     "in_standard_filter": 1,
                     "description": (
-                        "Paket statis (doctype Product Bundle): 1 = Item ini punya Product Bundle "
-                        "yang AKTIF. Diisi otomatis oleh baseapp — jangan diisi manual."
+                        "Paket statis (doctype Product Bundle): 1 = Item ini paket statis. "
+                        "Diisi manual - tidak terikat status aktif/non-aktif Product Bundle."
                     ),
                 }
             ]
@@ -807,75 +814,42 @@ def ensure_product_bundle_custom_fields():
     )
 
 
-def item_has_active_product_bundle(item_code):
-    """Mirror of ERPNext's own packed_item.is_product_bundle(): only enabled bundles count.
+def ensure_manufactured_item_custom_fields():
+    """Add the is_manufactured_item flag to Item (idempotent).
 
-    Deliberately queries new_item_code and not the primary key: Product Bundle is
-    autonamed from new_item_code, but the field stays editable afterwards, so the two
-    can drift apart. ERPNext follows new_item_code, so this has to as well.
+    Marks Items that are manufactured in-house (produk manufaktur). Like
+    is_dynamic_product_bundle and is_product_bundle this is a plain manual flag:
+    ERPNext keeps no "manufactured" marker on Item (only default_bom /
+    include_item_in_manufacturing / is_sub_contracted_item), so the value is owned by
+    the user / frontend.
     """
-    if not item_code:
-        return False
-
-    return bool(frappe.db.exists("Product Bundle", {"new_item_code": item_code, "disabled": 0}))
-
-
-def _set_item_product_bundle_flag(item_code, value):
-    if not item_code or not frappe.db.exists("Item", item_code):
-        return
-
-    if frappe.db.get_value("Item", item_code, PRODUCT_BUNDLE_ITEM_FLAG) == value:
-        return
-
-    # update_modified=False: this is system bookkeeping, it should not look like a
-    # user edit on the Item. frappe.db.set_value() clears the document cache itself.
-    frappe.db.set_value("Item", item_code, PRODUCT_BUNDLE_ITEM_FLAG, value, update_modified=False)
-
-
-def _refresh_item_product_bundle_flag(item_code):
-    _set_item_product_bundle_flag(item_code, 1 if item_has_active_product_bundle(item_code) else 0)
+    create_custom_fields(
+        {
+            "Item": [
+                {
+                    "fieldname": "is_manufactured_item",
+                    "label": "Is Manufactured Item",
+                    "fieldtype": "Check",
+                    "default": "0",
+                    "insert_after": "is_product_bundle",
+                    "in_standard_filter": 1,
+                    "description": (
+                        "1 = Item adalah produk manufaktur (diproduksi sendiri). "
+                        "Diisi manual - tidak diturunkan dari BOM."
+                    ),
+                }
+            ]
+        }
+    )
 
 
-def sync_item_product_bundle_flag(doc, method=None):
-    """Hook: Product Bundle.on_update — mirror the bundle into Item.is_product_bundle.
-
-    Why a stored flag at all: ERPNext keeps nothing on Item (item.json has no bundle
-    field, product_bundle.py never writes back), and frappe.client.get_list cannot
-    reach another table — its filter DSL has no subquery/join. The frontend needs
-    "is this item a bundle?" as something it can filter and sort on.
-
-    Follows ERPNext's own definition (packed_item.is_product_bundle): only an ENABLED
-    Product Bundle counts, so toggling `disabled` flips the flag too.
-
-    on_update fires for insert as well (Document.run_post_save_methods runs
-    on_update whenever _action == "save", and insert uses _action="save"), so one
-    hook covers create and edit.
-
-    new_item_code is editable, so a changed value has to fix the previous item too.
-    """
-    previous = doc.get_doc_before_save()
-    old_item_code = previous.new_item_code if previous else None
-
-    _refresh_item_product_bundle_flag(doc.new_item_code)
-
-    if old_item_code and old_item_code != doc.new_item_code:
-        _refresh_item_product_bundle_flag(old_item_code)
-
-
-def clear_item_product_bundle_flag(doc, method=None):
-    """Hook: Product Bundle.on_trash — an Item has at most one Product Bundle.
-
-    Cleared directly instead of recomputed: on_trash runs while the row is still
-    there, so a re-read would keep finding the bundle being deleted. Both fields are
-    cleared because new_item_code may have drifted from the primary key.
-    """
-    for item_code in {doc.new_item_code, doc.name}:
-        _set_item_product_bundle_flag(item_code, 0)
-
-
+# Price list -> Item field. "Standard Selling" is the selling price list (Price List.selling = 1)
+# and carries Item.standard_rate ("Standard Selling Rate"); "Standard Buying" carries
+# Item.valuation_rate, the valuation / cost rate. This direction keeps the selling list from
+# being overwritten with the cost of goods by sync_standard_item_prices().
 STANDARD_ITEM_PRICE_FIELDS = {
-    "Standard Selling": "valuation_rate",
-    "Standard Buying": "standard_rate",
+    "Standard Selling": "standard_rate",
+    "Standard Buying": "valuation_rate",
 }
 
 
@@ -974,34 +948,3 @@ def sync_item_rate_from_standard_price(doc, method=None):
     rate = flt(doc.price_list_rate)
     if flt(item.get(item_field)) != rate:
         frappe.db.set_value("Item", doc.item_code, item_field, rate, update_modified=False)
-
-
-def backfill_item_product_bundle_flags():
-    """One-shot: rebuild Item.is_product_bundle for bundles created before the field.
-
-    Registered in hooks.after_install and as baseapp.patches.backfill_is_product_bundle
-    (sites that already have the app, whose install already marked every shipped patch
-    as completed). Idempotent, so re-running is harmless.
-    """
-    if not (frappe.db.exists("DocType", "Item") and frappe.db.exists("DocType", "Product Bundle")):
-        return
-
-    if not frappe.db.has_column("Item", PRODUCT_BUNDLE_ITEM_FLAG):
-        # the patch can run before enforce_baseapp_settings created the field
-        ensure_product_bundle_custom_fields()
-
-    # subquery reads new_item_code, matching item_has_active_product_bundle() and
-    # ERPNext's own packed_item.is_product_bundle(); "is not null" keeps NOT IN safe
-    active_bundles = (
-        "select new_item_code from `tabProduct Bundle` "
-        "where ifnull(disabled, 0) = 0 and new_item_code is not null"
-    )
-
-    frappe.db.sql(
-        f"""update `tabItem` set `{PRODUCT_BUNDLE_ITEM_FLAG}` = 1
-        where name in ({active_bundles}) and ifnull(`{PRODUCT_BUNDLE_ITEM_FLAG}`, 0) != 1"""
-    )
-    frappe.db.sql(
-        f"""update `tabItem` set `{PRODUCT_BUNDLE_ITEM_FLAG}` = 0
-        where name not in ({active_bundles}) and ifnull(`{PRODUCT_BUNDLE_ITEM_FLAG}`, 0) != 0"""
-    )

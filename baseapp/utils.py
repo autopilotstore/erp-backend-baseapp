@@ -219,13 +219,32 @@ def ensure_item_hashtag_custom_fields():
                     "options": "Item Hashtag",
                     "insert_after": "description",
                     "description": (
-                        "Hashtag produk (tanpa tanda #, huruf kecil). Satu hashtag per baris. "
-                        "Disimpan sebagai child table agar bisa dicari persis."
+                        "Hashtag produk (tanpa tanda #, huruf kecil). Satu hashtag per baris, "
+                        "dipilih dari master Hashtag."
                     ),
                 }
             ]
         }
     )
+
+
+def ensure_hashtag_master(value):
+    """Make sure `value` exists in the Hashtag master; return True when it does.
+
+    `Item Hashtag.hashtag` is a Link to the Hashtag master, so a value without a master
+    row cannot be stored. Outside setup paths an unknown hashtag is refused instead of
+    silently created: the frontend offers the existing values and creates new ones
+    through the master's own CRUD (frappe.client.*). During install / migrate / patch the
+    master row is created on the fly so fixtures and patches never lose data.
+    """
+    if frappe.db.exists("Hashtag", value):
+        return True
+
+    if frappe.flags.in_install or frappe.flags.in_migrate or frappe.flags.in_patch:
+        frappe.get_doc({"doctype": "Hashtag", "hashtag": value}).insert(ignore_permissions=True)
+        return True
+
+    return False
 
 
 def normalize_item_hashtags(doc, method=None):
@@ -275,6 +294,14 @@ def normalize_item_hashtags(doc, method=None):
 
         if value in seen:
             continue
+
+        if not ensure_hashtag_master(value):
+            frappe.throw(
+                frappe._(
+                    "Row #{0}: hashtag {1} belum terdaftar. Buat dulu di master Hashtag."
+                ).format(row.idx or position, frappe.bold(raw)),
+                title=frappe._("Unknown Hashtag"),
+            )
 
         seen.add(value)
         row.hashtag = value

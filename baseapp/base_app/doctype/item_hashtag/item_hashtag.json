@@ -10,11 +10,12 @@
  ],
  "fields": [
   {
-   "description": "Satu hashtag tanpa tanda '#' dan tanpa spasi, huruf kecil. Contoh: promo, best-seller. Ditulis ke huruf kecil dan dibersihkan otomatis oleh baseapp.",
+   "description": "Satu hashtag per baris, dipilih dari master Hashtag (tanpa tanda '#', huruf kecil). Ditulis ke huruf kecil dan dibersihkan otomatis oleh baseapp.",
    "fieldname": "hashtag",
-   "fieldtype": "Data",
+   "fieldtype": "Link",
    "in_list_view": 1,
    "label": "Hashtag",
+   "options": "Hashtag",
    "reqd": 1,
    "search_index": 1
   }

@@ -919,6 +919,7 @@ def sync_standard_item_prices(doc, method=None):
             filters={"item_code": doc.name, "price_list": price_list, "uom": doc.stock_uom},
             fields=[
                 "name",
+                "uom",
                 "price_list_rate",
                 "valid_from",
                 "valid_upto",
